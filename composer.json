@@ -1,5 +1,5 @@
 {
-    "name": "ninjiwi/ai-tool-policy-bundle",
+    "name": "berenger/ai-tool-policy-bundle",
     "description": "Symfony bundle providing a policy layer over the Symfony AI toolbox: tool filtering by tags, approval gating, and a debug command.",
     "type": "symfony-bundle",
     "license": "MIT",
@@ -55,8 +55,8 @@
         "cs-fix": "phpcbf"
     },
     "support": {
-        "issues": "https://github.com/ninjiwi/ai-tool-policy-bundle/issues",
-        "source": "https://github.com/ninjiwi/ai-tool-policy-bundle"
+        "issues": "https://github.com/Berenger/ai-tool-policy-bundle/issues",
+        "source": "https://github.com/Berenger/ai-tool-policy-bundle"
     },
     "extra": {
         "branch-alias": {

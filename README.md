@@ -13,7 +13,7 @@ Filters which tools the model can see, and can ask for confirmation before runni
 ## Installation
 
 ```bash
-composer require ninjiwi/ai-tool-policy-bundle
+composer require berenger/ai-tool-policy-bundle
 ```
 
 ## Configuration
