@@ -16,6 +16,22 @@ Filters which tools the model can see, and can ask for confirmation before runni
 composer require berenger/ai-tool-policy-bundle
 ```
 
+## Versions
+
+The bundle follows the `symfony/ai` minor it supports: the minor number is the
+same on both sides, so the installed pair is readable at a glance.
+
+| Bundle   | `symfony/ai-agent` |
+|----------|--------------------|
+| `0.10.x` | `^0.10`            |
+| `0.15.x` | `^0.15`            |
+
+A release only happens when there is something to ship. A patch fixes the
+bundle; the minor changes when `symfony/ai` breaks and this adapter follows.
+
+When a new `symfony/ai` minor is published: widen the constraint, run the test
+suite and the sandbox project against it, then tag `<minor>.0`.
+
 ## Configuration
 
 ```yaml
