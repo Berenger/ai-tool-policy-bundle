@@ -13,8 +13,9 @@ use ToolPolicy\Bundle\Registry\ToolBridgeRegistry;
 
 /**
  * Decorates the native Symfony AI Toolbox: execution, schema and argument
- * resolution stay delegated to the inner toolbox. This layer only filters the
- * tool list exposed to the model based on #[ToolBridge] policy (enabled + tags).
+ * resolution stay delegated to the inner toolbox. This layer filters the tool
+ * list exposed to the model based on #[ToolBridge] policy (enabled + tags), and
+ * refuses to execute any tool that is not in that list.
  */
 final class FilteredToolbox implements ToolboxInterface
 {
@@ -42,9 +43,12 @@ final class FilteredToolbox implements ToolboxInterface
             $name = $tool->getName();
             $metadata = $this->registry->get($name);
 
-            // No bridge metadata: keep the tool as-is (it has no policy to enforce).
+            // No bridge metadata: visible when no tag filter is configured, hidden as soon as
+            // allowed_tags is non-empty (a tool without #[ToolBridge] carries no tag to match).
             if (null === $metadata) {
-                $tools[] = $tool;
+                if ([] === $this->allowedTags) {
+                    $tools[] = $tool;
+                }
                 continue;
             }
 
@@ -64,7 +68,14 @@ final class FilteredToolbox implements ToolboxInterface
 
     public function execute(ToolCall $toolCall): ToolResult
     {
-        return $this->inner->execute($toolCall);
+        // Hidden is not enough: a tool the model cannot see must not run either.
+        foreach ($this->getTools() as $tool) {
+            if ($tool->getName() === $toolCall->getName()) {
+                return $this->inner->execute($toolCall);
+            }
+        }
+
+        return new ToolResult($toolCall, sprintf('Tool "%s" is not available.', $toolCall->getName()));
     }
 
     /**

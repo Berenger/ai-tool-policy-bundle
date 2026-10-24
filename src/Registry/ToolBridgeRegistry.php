@@ -30,14 +30,12 @@ final class ToolBridgeRegistry
         iterable $bridgedTools,
     ) {
         foreach ($bridgedTools as $tool) {
-            $entry = $this->buildMetadata($tool);
-            if (null === $entry) {
-                continue;
+            foreach ($this->buildMetadata($tool) as $entry) {
+                if (isset($this->metadata[$entry->name])) {
+                    throw new \LogicException(sprintf('Duplicate tool bridge name "%s".', $entry->name));
+                }
+                $this->metadata[$entry->name] = $entry;
             }
-            if (isset($this->metadata[$entry->name])) {
-                throw new \LogicException(sprintf('Duplicate tool bridge name "%s".', $entry->name));
-            }
-            $this->metadata[$entry->name] = $entry;
         }
     }
 
@@ -59,15 +57,20 @@ final class ToolBridgeRegistry
         return $this->metadata[$name] ?? null;
     }
 
-    private function buildMetadata(object $tool): ?ToolBridgeMetadata
+    /**
+     * One entry per #[AsTool]. With as many #[ToolBridge] as #[AsTool] they are
+     * paired by index; a single #[ToolBridge] applies to every tool of the class.
+     *
+     * @return list<ToolBridgeMetadata>
+     */
+    private function buildMetadata(object $tool): array
     {
         $reflection = new \ReflectionClass($tool);
 
         $bridgeAttributes = $reflection->getAttributes(ToolBridge::class);
         if ([] === $bridgeAttributes) {
-            return null;
+            return [];
         }
-        $bridge = $bridgeAttributes[0]->newInstance();
 
         $toolAttributes = $reflection->getAttributes(AsTool::class);
         if ([] === $toolAttributes) {
@@ -77,13 +80,29 @@ final class ToolBridgeRegistry
             ));
         }
 
-        $name = $toolAttributes[0]->newInstance()->name;
+        $bridgeCount = \count($bridgeAttributes);
+        $toolCount = \count($toolAttributes);
+        if (1 !== $bridgeCount && $bridgeCount !== $toolCount) {
+            throw new \LogicException(sprintf(
+                'Class "%s" declares %d #[AsTool] and %d #[ToolBridge]: use one #[ToolBridge] for all tools, '
+                    . 'or exactly one per #[AsTool] (paired by declaration order).',
+                $reflection->getName(),
+                $toolCount,
+                $bridgeCount,
+            ));
+        }
 
-        return new ToolBridgeMetadata(
-            name: $name,
-            enabled: $bridge->enabled,
-            tags: $bridge->tags,
-            requiresApproval: $bridge->requiresApproval,
-        );
+        $entries = [];
+        foreach ($toolAttributes as $index => $toolAttribute) {
+            $bridge = $bridgeAttributes[1 === $bridgeCount ? 0 : $index]->newInstance();
+            $entries[] = new ToolBridgeMetadata(
+                name: $toolAttribute->newInstance()->name,
+                enabled: $bridge->enabled,
+                tags: $bridge->tags,
+                requiresApproval: $bridge->requiresApproval,
+            );
+        }
+
+        return $entries;
     }
 }

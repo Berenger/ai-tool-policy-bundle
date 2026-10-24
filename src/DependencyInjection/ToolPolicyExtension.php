@@ -25,14 +25,15 @@ final class ToolPolicyExtension extends Extension
         $container->setParameter('tool_policy.allowed_tags', $config['allowed_tags']);
         $container->setParameter('tool_policy.toolbox_inner', $config['toolbox_inner']);
 
-        $innerRef = new Reference($config['toolbox_inner']);
-
+        // Decorate (not just wrap) the configured toolbox so the agent receives the filtered one.
         $container->getDefinition(FilteredToolbox::class)
-            ->setArgument('$inner', $innerRef)
+            ->setDecoratedService($config['toolbox_inner'])
+            ->setArgument('$inner', new Reference(FilteredToolbox::class . '.inner'))
             ->setArgument('$allowedTags', $config['allowed_tags']);
 
+        // The command compares against the undecorated toolbox, otherwise it would compare the decorator with itself.
         $container->getDefinition(DebugLlmToolsCommand::class)
-            ->setArgument('$innerToolbox', $innerRef);
+            ->setArgument('$innerToolbox', new Reference(FilteredToolbox::class . '.inner'));
     }
 
     public function getAlias(): string
