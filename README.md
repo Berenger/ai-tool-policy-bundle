@@ -1,5 +1,7 @@
 # AI Tool Policy Bundle
 
+[![Latest version](https://img.shields.io/packagist/v/berenger/ai-tool-policy-bundle.svg)](https://packagist.org/packages/berenger/ai-tool-policy-bundle)
+
 Policy layer on top of the Symfony AI toolbox.
 
 Filters which tools the model can see, and can ask for confirmation before running them.
