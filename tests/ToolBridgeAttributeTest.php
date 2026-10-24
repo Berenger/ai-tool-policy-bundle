@@ -16,6 +16,7 @@ final class ToolBridgeAttributeTest extends TestCase
         self::assertTrue($bridge->enabled);
         self::assertSame([], $bridge->tags);
         self::assertFalse($bridge->requiresApproval);
+        self::assertNull($bridge->name);
     }
 
     public function testCustomValues(): void

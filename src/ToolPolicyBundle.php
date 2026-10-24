@@ -21,14 +21,12 @@ final class ToolPolicyBundle extends Bundle
     {
         parent::build($container);
 
+        // Collection marker only: the policy is read from the #[ToolBridge] attribute
+        // by ToolBridgeRegistry, never from tag attributes.
         $container->registerAttributeForAutoconfiguration(
             ToolBridge::class,
-            static function (ChildDefinition $definition, ToolBridge $attribute): void {
-                $definition->addTag('tool_policy.bridge', [
-                    'enabled' => $attribute->enabled,
-                    'tags' => $attribute->tags,
-                    'requiresApproval' => $attribute->requiresApproval,
-                ]);
+            static function (ChildDefinition $definition): void {
+                $definition->addTag('tool_policy.bridge');
             },
         );
     }

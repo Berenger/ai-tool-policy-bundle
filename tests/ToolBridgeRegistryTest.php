@@ -67,6 +67,46 @@ final class ToolBridgeRegistryTest extends TestCase
         new ToolBridgeRegistry([$tool]);
     }
 
+    public function testBridgeNameOverridesToolName(): void
+    {
+        $tool = new #[AsTool(name: 'original', description: 'Original')]
+        #[ToolBridge(name: 'renamed', requiresApproval: true)]
+        class {
+        };
+
+        $registry = new ToolBridgeRegistry([$tool]);
+
+        self::assertNull($registry->get('original'));
+        $renamed = $registry->get('renamed');
+        self::assertNotNull($renamed);
+        self::assertSame('renamed', $renamed->name);
+        self::assertTrue($renamed->requiresApproval);
+    }
+
+    public function testBlankBridgeNameIsRejected(): void
+    {
+        $tool = new #[AsTool('original', 'Original')] #[ToolBridge(name: '  ')] class {
+        };
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('#[ToolBridge] with an empty name');
+
+        new ToolBridgeRegistry([$tool]);
+    }
+
+    public function testDuplicateBridgeNameIsRejected(): void
+    {
+        $first = new #[AsTool('first', 'First')] #[ToolBridge(name: 'same')] class {
+        };
+        $second = new #[AsTool('same', 'Second')] #[ToolBridge] class {
+        };
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('Duplicate tool bridge name "same"');
+
+        new ToolBridgeRegistry([$first, $second]);
+    }
+
     public function testDuplicateToolNameIsRejected(): void
     {
         $first = new #[AsTool('same', 'First')] #[ToolBridge] class {

@@ -82,6 +82,11 @@ final class ReadFileTool
 | `enabled` | `true` | Hides the tool when `false` |
 | `tags` | `[]` | Tags used by the `allowed_tags` filter |
 | `requiresApproval` | `false` | Asks for confirmation before execution |
+| `name` | `null` | Policy key, defaults to the `#[AsTool]` name (see below) |
+
+The policy is read from the PHP attribute; the `tool_policy.bridge` tag only
+serves to collect the service. Tagging a service by hand with
+`tool_policy.bridge` and attributes (`requiresApproval`, ...) has no effect.
 
 Without `#[ToolBridge]`, the tool stays visible as-is when `allowed_tags` is
 empty, and is hidden as soon as `allowed_tags` is set.
@@ -92,6 +97,37 @@ A hidden tool is not executable either: calling it by name returns
 `#[AsTool]` is repeatable. A single `#[ToolBridge]` applies to every `#[AsTool]`
 of the class; otherwise declare exactly one `#[ToolBridge]` per `#[AsTool]`,
 paired by declaration order. Any other combination fails at boot.
+
+### Renamed tools
+
+An application can rename a tool in its `ai:` configuration. The toolbox then
+exposes it under the new name, and the policy keyed on the `#[AsTool]` name no
+longer matches: the tool is treated as if it had no `#[ToolBridge]` (no filter,
+no approval). Align the `#[ToolBridge]` name with the exposed name:
+
+```yaml
+# config/packages/ai.yaml
+ai:
+    agent:
+        assistant:
+            tools:
+                services:
+                    - service: 'App\Tool\ReadFileTool'
+                      name: 'read_file_v2'          # name and description are both
+                      description: 'Read a file'    # required for the rename to apply
+```
+
+```php
+#[AsTool(name: 'read_file', description: 'Read a file')]
+#[ToolBridge(name: 'read_file_v2', tags: ['filesystem'], requiresApproval: true)]
+final class ReadFileTool
+{
+    // ...
+}
+```
+
+The policy is then registered under `read_file_v2` only, not under `read_file`.
+An empty `name` fails at boot, and so does a name already used by another tool.
 
 ## Approval
 

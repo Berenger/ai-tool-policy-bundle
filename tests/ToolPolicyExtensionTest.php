@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ToolPolicy\Bundle\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\AI\Agent\Toolbox\Attribute\AsTool;
 use Symfony\AI\Agent\Toolbox\Toolbox;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -12,6 +13,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use ToolPolicy\Bundle\Approval\ApprovalGateInterface;
 use ToolPolicy\Bundle\Command\DebugLlmToolsCommand;
 use ToolPolicy\Bundle\DependencyInjection\ToolPolicyExtension;
+use ToolPolicy\Bundle\Registry\ToolBridgeRegistry;
 use ToolPolicy\Bundle\Toolbox\FilteredToolbox;
 
 final class ToolPolicyExtensionTest extends TestCase
@@ -69,6 +71,23 @@ final class ToolPolicyExtensionTest extends TestCase
 
         self::assertInstanceOf(FilteredToolbox::class, $container->get('tb.a'));
         self::assertInstanceOf(Toolbox::class, $container->get('tb.b'));
+    }
+
+    public function testTagAttributesAreNotAPolicy(): void
+    {
+        $container = $this->container(['toolboxes' => ['tb.a']]);
+        $container->register('manual_tool')->setSynthetic(true)
+            ->addTag('tool_policy.bridge', ['requiresApproval' => true, 'tags' => ['shell']]);
+        $container->getDefinition(ToolBridgeRegistry::class)->setPublic(true);
+        $container->compile();
+
+        $container->set('manual_tool', new #[AsTool('manual', 'Manual')] class {
+        });
+        $registry = $container->get(ToolBridgeRegistry::class);
+
+        self::assertInstanceOf(ToolBridgeRegistry::class, $registry);
+        self::assertNull($registry->get('manual'));
+        self::assertSame([], $registry->all());
     }
 
     public function testEmptyConfigurationIsRejected(): void
