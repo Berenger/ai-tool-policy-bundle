@@ -97,9 +97,9 @@ final class DebugLlmToolsCommand extends Command
                 $rows[] = [
                     $tool->getName(),
                     $tool->getReference()->getClass(),
-                    null === $metadata ? '—' : ($metadata->enabled ? 'yes' : 'no'),
-                    [] === $tags ? '—' : implode(', ', $tags),
-                    null === $metadata ? '—' : ($metadata->requiresApproval ? 'yes' : 'no'),
+                    null === $metadata ? '-' : ($metadata->enabled ? 'yes' : 'no'),
+                    [] === $tags ? '-' : implode(', ', $tags),
+                    null === $metadata ? '-' : ($metadata->requiresApproval ? 'yes' : 'no'),
                     $isExposed ? 'yes' : 'no',
                 ];
 
@@ -129,7 +129,7 @@ final class DebugLlmToolsCommand extends Command
             $rows[$metadata->name] = [
                 $metadata->name,
                 $metadata->enabled ? 'yes' : 'no',
-                [] === $metadata->tags ? '—' : implode(', ', $metadata->tags),
+                [] === $metadata->tags ? '-' : implode(', ', $metadata->tags),
                 $metadata->requiresApproval ? 'yes' : 'no',
             ];
         }

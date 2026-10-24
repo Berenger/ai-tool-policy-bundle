@@ -153,16 +153,21 @@ final class FilteredToolboxTest extends TestCase
         self::assertSame(0, $calls);
     }
 
-    public function testToolAddedToTheInnerToolboxLaterIsExecutable(): void
+    public function testToolAddedToTheInnerToolboxLaterIsVisibleAndExecutable(): void
     {
         $calls = 0;
-        // Only a hidden tool at first: nothing exposed, and the empty list gets cached.
+        // Only a hidden tool at first: nothing exposed yet.
         $tools = new \ArrayObject([$this->tool('hidden', $this->bridged['hidden']::class)]);
         $toolbox = new FilteredToolbox($this->inner($tools, $calls), $this->registry());
         self::assertSame([], $toolbox->getTools());
 
         $tools[] = $this->tool('late', \stdClass::class);
 
+        // No cache: a tool discovered later is both visible to the model and executable.
+        self::assertSame(
+            ['late'],
+            array_map(static fn (Tool $tool): string => $tool->getName(), $toolbox->getTools()),
+        );
         self::assertSame('executed', $this->call($toolbox, 'late'));
         self::assertSame(1, $calls);
     }

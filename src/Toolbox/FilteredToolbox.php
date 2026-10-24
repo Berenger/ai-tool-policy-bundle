@@ -19,9 +19,6 @@ use ToolPolicy\Bundle\Registry\ToolBridgeRegistry;
  */
 final class FilteredToolbox implements ToolboxInterface
 {
-    /** @var list<Tool>|null */
-    private ?array $filteredTools = null;
-
     /**
      * @param list<string> $allowedTags Tags that must match to be visible. Empty = no filtering.
      */
@@ -34,14 +31,15 @@ final class FilteredToolbox implements ToolboxInterface
 
     public function getTools(): array
     {
-        return $this->filteredTools ??= $this->filtrer(array_values($this->inner->getTools()));
+        // No cache: a toolbox can gain tools at runtime (MCP, per-user tools). The filter
+        // is a map lookup per tool, so recomputing keeps visibility and execution in sync.
+        return $this->filtrer(array_values($this->inner->getTools()));
     }
 
     public function execute(ToolCall $toolCall): ToolResult
     {
         // Hidden is not enough: a tool the model cannot see must not run either.
-        // Decided on the fresh inner list, not on the getTools() cache.
-        foreach ($this->filtrer(array_values($this->inner->getTools())) as $tool) {
+        foreach ($this->getTools() as $tool) {
             if ($tool->getName() === $toolCall->getName()) {
                 return $this->inner->execute($toolCall);
             }
