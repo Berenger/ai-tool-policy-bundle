@@ -10,6 +10,8 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
+use ToolPolicy\Bundle\Approval\ApprovalGateInterface;
+use ToolPolicy\Bundle\Approval\DenyAllGate;
 use ToolPolicy\Bundle\Command\DebugLlmToolsCommand;
 use ToolPolicy\Bundle\Toolbox\FilteredToolbox;
 
@@ -22,6 +24,13 @@ final class ToolPolicyExtension extends Extension
 
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');
+
+        // Fail closed: without an application gate, a tool requiring approval is denied
+        // instead of the container crashing at compile time. An application that defines
+        // its own ApprovalGateInterface service keeps the upper hand, the alias is a default.
+        if (!$container->has(ApprovalGateInterface::class)) {
+            $container->setAlias(ApprovalGateInterface::class, DenyAllGate::class);
+        }
 
         // toolbox_inner is the legacy single-toolbox key; Configuration forbids combining it with toolboxes.
         $toolboxes = array_values([] !== $config['toolboxes'] ? $config['toolboxes'] : [$config['toolbox_inner']]);

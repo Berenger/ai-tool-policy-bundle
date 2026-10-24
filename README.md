@@ -25,8 +25,11 @@ same on both sides, so the installed pair is readable at a glance.
 
 | Bundle   | `symfony/ai-agent` |
 |----------|--------------------|
-| `0.10.x` | `^0.10`            |
 | `0.15.x` | `^0.15`            |
+
+The `0.10` line was withdrawn: that release predates the fix that actually
+wires the filter, so it exposed every tool, including the ones marked
+`enabled: false`. It is not installable anymore.
 
 A release only happens when there is something to ship. A patch fixes the
 bundle; the minor changes when `symfony/ai` breaks and this adapter follows.
@@ -170,8 +173,19 @@ and so does a name already used by another `#[ToolBridge]` tool. A single
 ## Approval
 
 If `requiresApproval: true`, the configured `ApprovalGateInterface` service is
-asked before running the tool. The consuming application must provide an
-implementation (for example an interactive CLI prompt).
+asked before running the tool.
+
+The bundle ships a `DenyAllGate` and aliases the interface to it, so an
+application always boots: a gated tool is then simply denied
+(`Tool "<name>" execution was not approved.`) instead of the container failing
+to compile. Provide your own implementation, for example an interactive CLI
+prompt, to decide case by case.
+
+```php
+// config/services.yaml
+ToolPolicy\Bundle\Approval\ApprovalGateInterface:
+    alias: App\Agent\MyApprovalGate
+```
 
 ## Debug
 

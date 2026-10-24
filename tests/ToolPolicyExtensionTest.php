@@ -39,7 +39,7 @@ final class ToolPolicyExtensionTest extends TestCase
      * extension, merged by MergeExtensionConfigurationPass), with an event dispatcher wired like
      * FrameworkBundle does, tb.a exposing GatedTool and HiddenTool, and tb.b empty.
      */
-    private function container(): ContainerBuilder
+    private function container(bool $withApplicationGate = true): ContainerBuilder
     {
         $container = new ContainerBuilder();
         $container->registerExtension(new ToolPolicyExtension());
@@ -64,7 +64,9 @@ final class ToolPolicyExtensionTest extends TestCase
         $container->register('tb.a', Toolbox::class)->setPublic(true)
             ->setArguments([[new Reference(GatedTool::class), new Reference(HiddenTool::class)]]);
         $container->register('tb.b', Toolbox::class)->setArguments([[]])->setPublic(true);
-        $container->register(ApprovalGateInterface::class)->setSynthetic(true);
+        if ($withApplicationGate) {
+            $container->register(ApprovalGateInterface::class)->setSynthetic(true);
+        }
 
         $container->setAlias('test.command', DebugLlmToolsCommand::class)->setPublic(true);
         $container->setAlias('test.registry', ToolBridgeRegistry::class)->setPublic(true);
@@ -157,6 +159,38 @@ final class ToolPolicyExtensionTest extends TestCase
         $toolbox = $container->get('tb.a');
         self::assertInstanceOf(FilteredToolbox::class, $toolbox);
         self::assertSame(['filesystem'], $toolbox->getAllowedTags());
+    }
+
+    public function testWithoutAnApplicationGateTheDefaultDeniesGatedTools(): void
+    {
+        // No ApprovalGateInterface service in the application: the container must still compile.
+        $container = $this->compiled(['toolboxes' => ['tb.a']], $this->container(false));
+        $dispatcher = $container->get('event_dispatcher');
+        self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
+
+        $event = new ToolCallRequested(
+            new ToolCall('call-1', 'gated', []),
+            new Tool(new ExecutionReference(GatedTool::class), 'gated', 'Gated tool'),
+        );
+        $dispatcher->dispatch($event);
+
+        self::assertTrue($event->isDenied(), 'the default gate must fail closed');
+    }
+
+    public function testApplicationGateOverridesTheDefault(): void
+    {
+        $container = $this->compiled(['toolboxes' => ['tb.a']]);
+        $container->set(ApprovalGateInterface::class, $this->gate(true));
+        $dispatcher = $container->get('event_dispatcher');
+        self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
+
+        $event = new ToolCallRequested(
+            new ToolCall('call-2', 'gated', []),
+            new Tool(new ExecutionReference(GatedTool::class), 'gated', 'Gated tool'),
+        );
+        $dispatcher->dispatch($event);
+
+        self::assertFalse($event->isDenied(), 'an application gate must replace the default');
     }
 
     public function testApprovalListenerIsWiredOnTheDispatcher(): void
