@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ToolPolicy\Bundle\DependencyInjection;
 
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
@@ -22,18 +23,30 @@ final class ToolPolicyExtension extends Extension
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');
 
+        // toolbox_inner is the legacy single-toolbox key, only used when toolboxes is empty.
+        $toolboxes = array_values([] !== $config['toolboxes'] ? $config['toolboxes'] : [$config['toolbox_inner']]);
+
         $container->setParameter('tool_policy.allowed_tags', $config['allowed_tags']);
         $container->setParameter('tool_policy.toolbox_inner', $config['toolbox_inner']);
+        $container->setParameter('tool_policy.toolboxes', $toolboxes);
 
-        // Decorate (not just wrap) the configured toolbox so the agent receives the filtered one.
-        $container->getDefinition(FilteredToolbox::class)
-            ->setDecoratedService($config['toolbox_inner'])
-            ->setArgument('$inner', new Reference(FilteredToolbox::class . '.inner'))
-            ->setArgument('$allowedTags', $config['allowed_tags']);
+        // Decorate (not just wrap) each configured toolbox so every agent receives a filtered one.
+        // Default priority keeps the filter under ai-bundle's FaultTolerantToolbox (-1024).
+        $base = $container->getDefinition(FilteredToolbox::class);
+        $decorators = [];
+        foreach ($toolboxes as $index => $toolboxId) {
+            $decoratorId = 0 === $index ? FilteredToolbox::class : FilteredToolbox::class . '.' . $index;
+            $definition = 0 === $index ? $base : $container->setDefinition($decoratorId, clone $base);
+            $definition
+                ->setClass(FilteredToolbox::class)
+                ->setDecoratedService($toolboxId)
+                ->setArgument('$inner', new Reference($decoratorId . '.inner'))
+                ->setArgument('$allowedTags', $config['allowed_tags']);
+            $decorators[$toolboxId] = new Reference($decoratorId);
+        }
 
-        // The command compares against the undecorated toolbox, otherwise it would compare the decorator with itself.
         $container->getDefinition(DebugLlmToolsCommand::class)
-            ->setArgument('$innerToolbox', new Reference(FilteredToolbox::class . '.inner'));
+            ->setArgument('$toolboxes', new IteratorArgument($decorators));
     }
 
     public function getAlias(): string

@@ -79,6 +79,14 @@ final class FilteredToolbox implements ToolboxInterface
     }
 
     /**
+     * The undecorated toolbox, with every tool including the hidden ones.
+     */
+    public function getInner(): ToolboxInterface
+    {
+        return $this->inner;
+    }
+
+    /**
      * @return list<string>
      */
     public function getAllowedTags(): array

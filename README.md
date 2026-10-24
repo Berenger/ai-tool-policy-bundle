@@ -21,21 +21,45 @@ composer require berenger/ai-tool-policy-bundle
 ```yaml
 # config/packages/tool_policy.yaml
 tool_policy:
-    toolbox_inner: 'ai.toolbox.assistant' # ai.toolbox.<agent name>, the toolbox to decorate
+    toolboxes:                            # ai.toolbox.<agent name>, the toolboxes to decorate
+        - 'ai.toolbox.assistant'
     allowed_tags: []                      # empty = no tag filtering
 ```
 
 `symfony/ai-bundle` creates one toolbox service per agent, named
 `ai.toolbox.<agent name>` (here the agent declared under `ai.agent.assistant`).
-There is no `ai.toolbox` service: that name is only a tag.
+There is no `ai.toolbox` service: that name is only a tag. A toolbox that is
+not listed in `toolboxes` is not filtered: its agent sees every tool, including
+the ones marked `enabled: false`.
 
-Example with a filter:
+Example with two agents and a filter:
 
 ```yaml
+# config/packages/ai.yaml
+ai:
+    agent:
+        assistant:
+            platform: 'ai.platform.openai'
+            model: 'gpt-4o-mini'
+            tools: true
+        support:
+            platform: 'ai.platform.openai'
+            model: 'gpt-4o-mini'
+            tools: true
+
+# config/packages/tool_policy.yaml
 tool_policy:
-    toolbox_inner: 'ai.toolbox.assistant'
+    toolboxes:
+        - 'ai.toolbox.assistant'
+        - 'ai.toolbox.support'
     allowed_tags: ['filesystem', 'http']
 ```
+
+The same policy (`allowed_tags`) applies to every listed toolbox. Listing the
+same toolbox twice, or configuring no toolbox at all, fails at boot.
+
+`toolbox_inner: 'ai.toolbox.assistant'` (single toolbox) is still accepted for
+backward compatibility, and only used when `toolboxes` is empty.
 
 ## `#[ToolBridge]` attribute
 
@@ -83,4 +107,6 @@ php bin/console debug:llm-tools --exposed
 php bin/console debug:llm-tools --tag=filesystem
 ```
 
-Shows enabled, tags, approval, and whether the tool is exposed to the model.
+Shows, for each filtered toolbox, enabled, tags, approval, and whether the tool
+is exposed to the model, then the `#[ToolBridge]` tools exposed by no toolbox.
+`--tag` and `--exposed` apply to every section.
