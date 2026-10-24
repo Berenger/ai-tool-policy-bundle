@@ -33,7 +33,7 @@ final class FilteredToolbox implements ToolboxInterface
     {
         // No cache: a toolbox can gain tools at runtime (MCP, per-user tools). The filter
         // is a map lookup per tool, so recomputing keeps visibility and execution in sync.
-        return $this->filtrer(array_values($this->inner->getTools()));
+        return $this->filter(array_values($this->inner->getTools()));
     }
 
     public function execute(ToolCall $toolCall): ToolResult
@@ -69,7 +69,7 @@ final class FilteredToolbox implements ToolboxInterface
      *
      * @return list<Tool>
      */
-    private function filtrer(array $tools): array
+    private function filter(array $tools): array
     {
         $filtered = [];
         foreach ($tools as $tool) {

@@ -45,13 +45,19 @@ tool_policy:
     toolboxes:                            # ai.toolbox.<agent name>, the toolboxes to decorate
         - 'ai.toolbox.assistant'
     allowed_tags: []                      # empty = no tag filtering
+    auto: false                           # also decorate the ai.toolbox services not listed
 ```
 
 `symfony/ai-bundle` creates one toolbox service per agent, named
 `ai.toolbox.<agent name>` (here the agent declared under `ai.agent.assistant`).
 There is no `ai.toolbox` service: that name is only a tag. A toolbox that is
 not listed in `toolboxes` is not filtered: its agent sees every tool, including
-the ones marked `enabled: false`.
+the ones marked `enabled: false`, unless `auto` is enabled.
+
+With `auto: true`, every service tagged `ai.toolbox` that `toolboxes` does not
+list is decorated too, and `toolboxes` may then be empty. An agent added later is
+therefore filtered without touching this configuration, which is the point: check
+`debug:llm-tools` when you add one.
 
 The filter decorates each toolbox with the default priority (0). A decorator of
 your own on the same toolbox with a negative priority wraps the filter: tools it
@@ -81,8 +87,8 @@ tool_policy:
 ```
 
 The same policy (`allowed_tags`) applies to every listed toolbox. Listing the
-same toolbox twice, or configuring no toolbox at all, fails at container
-compilation.
+same toolbox twice, or configuring no toolbox at all without `auto`, fails at
+container compilation.
 
 `allowed_tags` is not merged across configuration files: a later declaration
 (for example under `when@prod`) replaces the previous list instead of adding to
@@ -127,9 +133,8 @@ A hidden tool is not executable either: calling it by name returns
 
 `#[AsTool]` is repeatable. A single `#[ToolBridge]` applies to every `#[AsTool]`
 of the class; otherwise declare exactly one `#[ToolBridge]` per `#[AsTool]`,
-paired by declaration order. Any other combination throws when the policy
-registry is first built (first use of an agent toolbox or of `debug:llm-tools`),
-not at container compilation: run `debug:llm-tools` in CI to catch it early.
+paired by declaration order. Any other combination, or a `#[ToolBridge]` on a
+class without `#[AsTool]`, fails at container compilation.
 
 ### Renamed tools
 
@@ -166,8 +171,8 @@ the name of a tool from another class does not hand the policy over to it (that
 tool is treated as having no `#[ToolBridge]`). `debug:llm-tools` fails on a
 `name` that matches no tool of its class.
 
-An empty `name` throws in the same way as above (first use, not compilation),
-and so does a name already used by another `#[ToolBridge]` tool. A single
+An empty `name` fails at container compilation in the same way, and so does a
+name already used by another `#[ToolBridge]` tool. A single
 `#[ToolBridge]` shared by several `#[AsTool]` cannot set `name`.
 
 ## Approval
@@ -201,5 +206,6 @@ is exposed to the model, then the `#[ToolBridge]` tools exposed by no toolbox.
 `#[ToolBridge(name:)]` alias matches no tool of its class in any toolbox.
 
 The decorators are registered as `tool_policy.filtered_toolbox`,
-`tool_policy.filtered_toolbox.1`, ... (one per entry of `toolboxes`, in order);
+`tool_policy.filtered_toolbox.1`, ... (one per entry of `toolboxes`, in order,
+then one per toolbox decorated by `auto`);
 `ToolPolicy\Bundle\Toolbox\FilteredToolbox` is an alias to the first one.

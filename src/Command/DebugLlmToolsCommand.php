@@ -24,7 +24,7 @@ use ToolPolicy\Bundle\Toolbox\FilteredToolbox;
  */
 #[AsCommand(
     name: 'debug:llm-tools',
-    description: 'List the exposed LLM tools and their configuration #[ToolBridge]',
+    description: 'List the LLM tools, their #[ToolBridge] policy and whether they are exposed',
 )]
 final class DebugLlmToolsCommand extends Command
 {
@@ -53,10 +53,10 @@ final class DebugLlmToolsCommand extends Command
 
         // Every filter shares the same configuration.
         $allowedTags = (array_values($toolboxes)[0] ?? null)?->getAllowedTags() ?? [];
-        $io->section('Configuration FilteredToolbox');
+        $io->section('FilteredToolbox configuration');
         $io->text([] === $allowedTags
-            ? 'Aucun tag autorisé (pas de filtrage par tag).'
-            : 'Tags autorisés : ' . implode(', ', $allowedTags));
+            ? 'No allowed tags: tools are not filtered by tag.'
+            : 'Allowed tags: ' . implode(', ', $allowedTags) . '.');
 
         $tagFilter = $input->getOption('tag');
         $onlyExposed = (bool) $input->getOption('exposed');
@@ -110,7 +110,7 @@ final class DebugLlmToolsCommand extends Command
 
             $io->section('Toolbox ' . $toolboxId);
             if ([] === $rows) {
-                $io->warning('Aucun tool ne correspond aux filtres.');
+                $io->warning('No tool matches the filters.');
             } else {
                 $io->table(['Name', 'Class', 'Enabled', 'Tags', 'Approval', 'Exposed'], $rows);
             }
@@ -135,9 +135,9 @@ final class DebugLlmToolsCommand extends Command
         }
         ksort($rows);
 
-        $io->section('Outils déclarés mais jamais exposés');
+        $io->section('Tools declared but never exposed');
         if ([] === $rows) {
-            $io->text('Aucun.');
+            $io->text('None.');
         } else {
             $io->table(['Name', 'Enabled', 'Tags', 'Approval'], array_values($rows));
         }
@@ -145,8 +145,8 @@ final class DebugLlmToolsCommand extends Command
         if ([] !== $orphans) {
             sort($orphans);
             $io->error(\sprintf(
-                "#[ToolBridge(name:)] sans outil correspondant dans aucun toolbox\n"
-                    . "(nom mal orthographié, renommage `ai:` modifié ?) :\n%s",
+                "These #[ToolBridge(name:)] aliases match no tool in any toolbox.\n"
+                    . "Check their spelling, or align them with the rename in your `ai:` configuration:\n%s",
                 implode("\n", $orphans),
             ));
 

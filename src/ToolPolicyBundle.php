@@ -8,6 +8,8 @@ use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 use ToolPolicy\Bundle\Attribute\ToolBridge;
+use ToolPolicy\Bundle\DependencyInjection\Compiler\AutoDecorateToolboxesPass;
+use ToolPolicy\Bundle\DependencyInjection\Compiler\ToolBridgeValidationPass;
 use ToolPolicy\Bundle\DependencyInjection\ToolPolicyExtension;
 
 final class ToolPolicyBundle extends Bundle
@@ -22,12 +24,15 @@ final class ToolPolicyBundle extends Bundle
         parent::build($container);
 
         // Collection marker only: the policy is read from the #[ToolBridge] attribute
-        // by ToolBridgeRegistry, never from tag attributes.
+        // (ToolBridgeValidationPass, ToolBridgeRegistry), never from tag attributes.
         $container->registerAttributeForAutoconfiguration(
             ToolBridge::class,
             static function (ChildDefinition $definition): void {
                 $definition->addTag('tool_policy.bridge');
             },
         );
+
+        $container->addCompilerPass(new ToolBridgeValidationPass());
+        $container->addCompilerPass(new AutoDecorateToolboxesPass());
     }
 }

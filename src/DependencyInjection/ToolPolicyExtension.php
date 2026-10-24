@@ -13,6 +13,7 @@ use Symfony\Component\DependencyInjection\Reference;
 use ToolPolicy\Bundle\Approval\ApprovalGateInterface;
 use ToolPolicy\Bundle\Approval\DenyAllGate;
 use ToolPolicy\Bundle\Command\DebugLlmToolsCommand;
+use ToolPolicy\Bundle\DependencyInjection\Compiler\AutoDecorateToolboxesPass;
 use ToolPolicy\Bundle\Toolbox\FilteredToolbox;
 
 final class ToolPolicyExtension extends Extension
@@ -33,7 +34,8 @@ final class ToolPolicyExtension extends Extension
         }
 
         // toolbox_inner is the legacy single-toolbox key; Configuration forbids combining it with toolboxes.
-        $toolboxes = array_values([] !== $config['toolboxes'] ? $config['toolboxes'] : [$config['toolbox_inner']]);
+        // Both may be empty with `auto`.
+        $toolboxes = array_values($config['toolboxes'] ?: array_filter([$config['toolbox_inner']]));
 
         // Decorate (not just wrap) each configured toolbox, at the default priority (0): the filter sits
         // under ai-bundle's FaultTolerantToolbox (-1024) and under any decorator of positive priority.
@@ -42,18 +44,26 @@ final class ToolPolicyExtension extends Extension
         // Ids are the bundle's own (tool_policy.filtered_toolbox, .1, .2...) so that no application
         // service can replace a decorator by id collision; the class name is only an alias to the first.
         // The class is no longer derived from the id: set it on the pristine definition, cloned below.
-        $base = $container->getDefinition(FilteredToolbox::class)->setClass(FilteredToolbox::class);
+        $base = $container->getDefinition(FilteredToolbox::class)
+            ->setClass(FilteredToolbox::class)
+            ->setArgument('$allowedTags', $config['allowed_tags']);
         $container->removeDefinition(FilteredToolbox::class);
         $decorators = [];
         foreach ($toolboxes as $index => $toolboxId) {
             $decoratorId = 'tool_policy.filtered_toolbox' . (0 === $index ? '' : '.' . $index);
             $container->setDefinition($decoratorId, clone $base)
                 ->setDecoratedService($toolboxId)
-                ->setArgument('$inner', new Reference($decoratorId . '.inner'))
-                ->setArgument('$allowedTags', $config['allowed_tags']);
+                ->setArgument('$inner', new Reference($decoratorId . '.inner'));
             $decorators[$toolboxId] = new Reference($decoratorId);
         }
-        $container->setAlias(FilteredToolbox::class, 'tool_policy.filtered_toolbox');
+        if ([] !== $decorators) {
+            $container->setAlias(FilteredToolbox::class, 'tool_policy.filtered_toolbox');
+        }
+
+        // AutoDecorateToolboxesPass clones it for the ai.toolbox services left undecorated.
+        if ($config['auto']) {
+            $container->setDefinition(AutoDecorateToolboxesPass::PROTOTYPE, (clone $base)->setAbstract(true));
+        }
 
         $container->getDefinition(DebugLlmToolsCommand::class)
             ->setArgument('$toolboxes', new IteratorArgument($decorators));

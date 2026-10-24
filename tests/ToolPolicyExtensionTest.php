@@ -119,7 +119,7 @@ final class ToolPolicyExtensionTest extends TestCase
     public function testToolboxesAndToolboxInnerTogetherAreRejected(): void
     {
         $this->expectException(InvalidConfigurationException::class);
-        $this->expectExceptionMessage('utilisez toolboxes, toolbox_inner est conservé pour la compatibilité');
+        $this->expectExceptionMessage('`toolboxes` and `toolbox_inner` are both set: use `toolboxes`');
 
         $this->compiled(['toolboxes' => ['tb.a'], 'toolbox_inner' => 'tb.b']);
     }
@@ -236,7 +236,7 @@ final class ToolPolicyExtensionTest extends TestCase
             $display,
         );
         // Name, Enabled, Tags, Approval.
-        $neverExposed = substr($display, (int) strpos($display, 'jamais exposés'));
+        $neverExposed = substr($display, (int) strpos($display, 'never exposed'));
         self::assertMatchesRegularExpression('/^\s*hidden_tool\s+no\s+filesystem\s+no\s*$/m', $neverExposed);
         self::assertStringNotContainsString('gated', $neverExposed);
     }
@@ -259,7 +259,7 @@ final class ToolPolicyExtensionTest extends TestCase
     public function testEmptyConfigurationIsRejected(): void
     {
         $this->expectException(InvalidConfigurationException::class);
-        $this->expectExceptionMessage('configurez `tool_policy.toolboxes` avec au moins un service id');
+        $this->expectExceptionMessage('No toolbox to filter: list at least one service id in `tool_policy.toolboxes`');
 
         $this->compiled([]);
     }
@@ -270,5 +270,62 @@ final class ToolPolicyExtensionTest extends TestCase
         $this->expectExceptionMessage('"tb.a"');
 
         $this->compiled(['toolboxes' => ['tb.a', 'tb.b', 'tb.a']]);
+    }
+
+    public function testAutoDecoratesEveryTaggedToolbox(): void
+    {
+        $container = $this->container();
+        $container->getDefinition('tb.a')->addTag('ai.toolbox');
+        $container->getDefinition('tb.b')->addTag('ai.toolbox');
+        $this->compiled(['toolboxes' => [], 'auto' => true], $container);
+
+        self::assertInstanceOf(FilteredToolbox::class, $container->get('tb.a'));
+        self::assertInstanceOf(FilteredToolbox::class, $container->get('tb.b'));
+        $this->assertDebugCommandLists($container, ['tb.a', 'tb.b']);
+    }
+
+    public function testAutoCompletesTheConfiguredToolboxes(): void
+    {
+        $container = $this->container();
+        $container->getDefinition('tb.a')->addTag('ai.toolbox');
+        $container->getDefinition('tb.b')->addTag('ai.toolbox');
+        $this->compiled(['toolboxes' => ['tb.a'], 'auto' => true], $container);
+
+        $first = $container->get('tb.a');
+        self::assertInstanceOf(FilteredToolbox::class, $first);
+        // Already listed: decorated once, not a second time by auto.
+        self::assertNotInstanceOf(FilteredToolbox::class, $first->getInner());
+        self::assertInstanceOf(FilteredToolbox::class, $container->get('tb.b'));
+        $this->assertDebugCommandLists($container, ['tb.a', 'tb.b']);
+    }
+
+    public function testAutoWithoutAnyTaggedToolboxCompiles(): void
+    {
+        $container = $this->compiled(['auto' => true]);
+
+        self::assertInstanceOf(Toolbox::class, $container->get('tb.a'));
+    }
+
+    public function testWithoutAutoUnlistedToolboxesAreLeftAlone(): void
+    {
+        $container = $this->container();
+        $container->getDefinition('tb.b')->addTag('ai.toolbox');
+        $this->compiled(['toolboxes' => ['tb.a']], $container);
+
+        self::assertInstanceOf(Toolbox::class, $container->get('tb.b'));
+    }
+
+    /**
+     * @param list<string> $toolboxIds
+     */
+    private function assertDebugCommandLists(ContainerBuilder $container, array $toolboxIds): void
+    {
+        $command = $container->get('test.command');
+        self::assertInstanceOf(DebugLlmToolsCommand::class, $command);
+        $tester = new CommandTester($command);
+        $tester->execute([]);
+        foreach ($toolboxIds as $id) {
+            self::assertStringContainsString('Toolbox ' . $id, $tester->getDisplay());
+        }
     }
 }

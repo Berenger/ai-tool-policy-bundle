@@ -16,14 +16,15 @@ final class Configuration implements ConfigurationInterface
         $treeBuilder->getRootNode()
             ->validate()
                 ->ifTrue(static fn (array $config): bool
-                    => [] === $config['toolboxes'] && null === $config['toolbox_inner'])
-                ->thenInvalid('configurez `tool_policy.toolboxes` avec au moins un service id')
+                    => [] === $config['toolboxes'] && null === $config['toolbox_inner'] && !$config['auto'])
+                ->thenInvalid('No toolbox to filter: list at least one service id in `tool_policy.toolboxes`, '
+                    . 'or set `tool_policy.auto: true`.')
             ->end()
             ->validate()
                 ->ifTrue(static fn (array $config): bool
                     => [] !== $config['toolboxes'] && null !== $config['toolbox_inner'])
-                ->thenInvalid('`toolboxes` et `toolbox_inner` sont renseignés ensemble : utilisez toolboxes, '
-                    . 'toolbox_inner est conservé pour la compatibilité')
+                ->thenInvalid('`toolboxes` and `toolbox_inner` are both set: use `toolboxes`, '
+                    . '`toolbox_inner` is only kept for backward compatibility.')
             ->end()
             ->children()
                 ->arrayNode('allowed_tags')
@@ -41,11 +42,16 @@ final class Configuration implements ConfigurationInterface
                         ->ifTrue(static fn (array $ids): bool => \count($ids) !== \count(array_unique($ids)))
                         ->then(static function (array $ids): never {
                             throw new \InvalidArgumentException(\sprintf(
-                                'service id déclaré plusieurs fois dans `tool_policy.toolboxes` : "%s"',
+                                'Service id listed more than once in `tool_policy.toolboxes`: "%s". '
+                                    . 'List each toolbox once.',
                                 implode('", "', array_unique(array_diff_assoc($ids, array_unique($ids)))),
                             ));
                         })
                     ->end()
+                ->end()
+                ->booleanNode('auto')
+                    ->info('Also decorate the ai.toolbox services not listed in "toolboxes".')
+                    ->defaultFalse()
                 ->end()
                 ->scalarNode('toolbox_inner')
                     ->info('Legacy single toolbox to decorate, kept for backward compatibility. Not with "toolboxes".')
