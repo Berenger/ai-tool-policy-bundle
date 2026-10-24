@@ -23,27 +23,28 @@ final class ToolPolicyExtension extends Extension
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');
 
-        // toolbox_inner is the legacy single-toolbox key, only used when toolboxes is empty.
+        // toolbox_inner is the legacy single-toolbox key; Configuration forbids combining it with toolboxes.
         $toolboxes = array_values([] !== $config['toolboxes'] ? $config['toolboxes'] : [$config['toolbox_inner']]);
 
-        $container->setParameter('tool_policy.allowed_tags', $config['allowed_tags']);
-        $container->setParameter('tool_policy.toolbox_inner', $config['toolbox_inner']);
-        $container->setParameter('tool_policy.toolboxes', $toolboxes);
-
-        // Decorate (not just wrap) each configured toolbox so every agent receives a filtered one.
-        // Default priority keeps the filter under ai-bundle's FaultTolerantToolbox (-1024).
-        $base = $container->getDefinition(FilteredToolbox::class);
+        // Decorate (not just wrap) each configured toolbox, at the default priority (0): the filter sits
+        // under ai-bundle's FaultTolerantToolbox (-1024) and under any decorator of positive priority.
+        // A decorator of the application with a negative priority wraps the filter instead: the tools
+        // it adds are not filtered.
+        // Ids are the bundle's own (tool_policy.filtered_toolbox, .1, .2...) so that no application
+        // service can replace a decorator by id collision; the class name is only an alias to the first.
+        // The class is no longer derived from the id: set it on the pristine definition, cloned below.
+        $base = $container->getDefinition(FilteredToolbox::class)->setClass(FilteredToolbox::class);
+        $container->removeDefinition(FilteredToolbox::class);
         $decorators = [];
         foreach ($toolboxes as $index => $toolboxId) {
-            $decoratorId = 0 === $index ? FilteredToolbox::class : FilteredToolbox::class . '.' . $index;
-            $definition = 0 === $index ? $base : $container->setDefinition($decoratorId, clone $base);
-            $definition
-                ->setClass(FilteredToolbox::class)
+            $decoratorId = 'tool_policy.filtered_toolbox' . (0 === $index ? '' : '.' . $index);
+            $container->setDefinition($decoratorId, clone $base)
                 ->setDecoratedService($toolboxId)
                 ->setArgument('$inner', new Reference($decoratorId . '.inner'))
                 ->setArgument('$allowedTags', $config['allowed_tags']);
             $decorators[$toolboxId] = new Reference($decoratorId);
         }
+        $container->setAlias(FilteredToolbox::class, 'tool_policy.filtered_toolbox');
 
         $container->getDefinition(DebugLlmToolsCommand::class)
             ->setArgument('$toolboxes', new IteratorArgument($decorators));

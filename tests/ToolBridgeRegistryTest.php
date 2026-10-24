@@ -67,7 +67,7 @@ final class ToolBridgeRegistryTest extends TestCase
         new ToolBridgeRegistry([$tool]);
     }
 
-    public function testBridgeNameOverridesToolName(): void
+    public function testBridgeNameIsAnAliasOfTheToolName(): void
     {
         $tool = new #[AsTool(name: 'original', description: 'Original')]
         #[ToolBridge(name: 'renamed', requiresApproval: true)]
@@ -76,11 +76,29 @@ final class ToolBridgeRegistryTest extends TestCase
 
         $registry = new ToolBridgeRegistry([$tool]);
 
-        self::assertNull($registry->get('original'));
-        $renamed = $registry->get('renamed');
-        self::assertNotNull($renamed);
-        self::assertSame('renamed', $renamed->name);
-        self::assertTrue($renamed->requiresApproval);
+        // The rename is per agent: the #[AsTool] name keeps the policy too.
+        foreach (['original', 'renamed'] as $name) {
+            $metadata = $registry->get($name);
+            self::assertNotNull($metadata, $name);
+            self::assertSame($name, $metadata->name);
+            self::assertTrue($metadata->requiresApproval, $name);
+            self::assertSame($tool::class, $metadata->className, $name);
+        }
+        self::assertCount(2, $registry->all());
+    }
+
+    public function testSharedBridgeCannotSetAName(): void
+    {
+        $tool = new #[AsTool('db_read', 'Read', method: 'read')]
+        #[AsTool('db_drop', 'Drop', method: 'drop')]
+        #[ToolBridge(name: 'db', requiresApproval: true)]
+        class {
+        };
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('a shared #[ToolBridge] cannot set "name"');
+
+        new ToolBridgeRegistry([$tool]);
     }
 
     public function testBlankBridgeNameIsRejected(): void

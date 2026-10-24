@@ -19,9 +19,17 @@ final class Configuration implements ConfigurationInterface
                     => [] === $config['toolboxes'] && null === $config['toolbox_inner'])
                 ->thenInvalid('configurez `tool_policy.toolboxes` avec au moins un service id')
             ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool
+                    => [] !== $config['toolboxes'] && null !== $config['toolbox_inner'])
+                ->thenInvalid('`toolboxes` et `toolbox_inner` sont renseignés ensemble : utilisez toolboxes, '
+                    . 'toolbox_inner est conservé pour la compatibilité')
+            ->end()
             ->children()
                 ->arrayNode('allowed_tags')
                     ->info('Tags a tool must expose to be visible. Empty = no tag filtering.')
+                    // A whitelist: a later file (when@prod...) replaces it instead of appending to it.
+                    ->performNoDeepMerging()
                     ->scalarPrototype()->end()
                     ->defaultValue([])
                 ->end()
@@ -32,7 +40,7 @@ final class Configuration implements ConfigurationInterface
                     ->validate()
                         ->ifTrue(static fn (array $ids): bool => \count($ids) !== \count(array_unique($ids)))
                         ->then(static function (array $ids): never {
-                            throw new \InvalidArgumentException(sprintf(
+                            throw new \InvalidArgumentException(\sprintf(
                                 'service id déclaré plusieurs fois dans `tool_policy.toolboxes` : "%s"',
                                 implode('", "', array_unique(array_diff_assoc($ids, array_unique($ids)))),
                             ));
@@ -40,7 +48,7 @@ final class Configuration implements ConfigurationInterface
                     ->end()
                 ->end()
                 ->scalarNode('toolbox_inner')
-                    ->info('Legacy single toolbox to decorate, used only when "toolboxes" is empty.')
+                    ->info('Legacy single toolbox to decorate, kept for backward compatibility. Not with "toolboxes".')
                     ->defaultNull()
                     ->cannotBeEmpty()
                 ->end()

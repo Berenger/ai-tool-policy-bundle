@@ -26,12 +26,14 @@ final class ToolApprovalListener
     public function onToolCallRequested(ToolCallRequested $event): void
     {
         $metadata = $this->registry->get($event->getToolCall()->getName());
-        if (null === $metadata || !$metadata->requiresApproval) {
+        // Same rule as FilteredToolbox: a policy only applies to the class that declares it.
+        $class = $event->getDefinition()->getReference()->getClass();
+        if (null === $metadata || !$metadata->requiresApproval || $metadata->className !== $class) {
             return;
         }
 
         if (!$this->gate->approve($event->getToolCall())) {
-            $event->deny(sprintf('Tool "%s" execution was not approved.', $event->getToolCall()->getName()));
+            $event->deny(\sprintf('Tool "%s" execution was not approved.', $event->getToolCall()->getName()));
         }
     }
 }

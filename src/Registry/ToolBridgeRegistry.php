@@ -12,8 +12,9 @@ use ToolPolicy\Bundle\Metadata\ToolBridgeMetadata;
 /**
  * Maps tool names to their #[ToolBridge] policy metadata. Tool names are read
  * from the matching #[AsTool] attribute on the same class, so the registry
- * stays aligned with what Symfony AI actually exposes to the model, unless
- * #[ToolBridge(name: ...)] overrides them for a tool renamed in the `ai:` config.
+ * stays aligned with what Symfony AI actually exposes to the model.
+ * #[ToolBridge(name: ...)] adds an alias for a tool renamed in the `ai:` config;
+ * the #[AsTool] name stays registered, since the rename is per agent.
  *
  * The policy is read from the PHP attribute only: a service tagged
  * tool_policy.bridge without #[ToolBridge] yields no entry.
@@ -36,7 +37,12 @@ final class ToolBridgeRegistry
         foreach ($bridgedTools as $tool) {
             foreach ($this->buildMetadata($tool) as $entry) {
                 if (isset($this->metadata[$entry->name])) {
-                    throw new \LogicException(sprintf('Duplicate tool bridge name "%s".', $entry->name));
+                    throw new \LogicException(\sprintf(
+                        'Duplicate tool bridge name "%s" (declared by "%s" and "%s").',
+                        $entry->name,
+                        $this->metadata[$entry->name]->className,
+                        $entry->className,
+                    ));
                 }
                 $this->metadata[$entry->name] = $entry;
             }
@@ -51,19 +57,15 @@ final class ToolBridgeRegistry
         return array_values($this->metadata);
     }
 
-    public function has(string $name): bool
-    {
-        return isset($this->metadata[$name]);
-    }
-
     public function get(string $name): ?ToolBridgeMetadata
     {
         return $this->metadata[$name] ?? null;
     }
 
     /**
-     * One entry per #[AsTool]. With as many #[ToolBridge] as #[AsTool] they are
-     * paired by index; a single #[ToolBridge] applies to every tool of the class.
+     * One entry per #[AsTool], plus one per #[ToolBridge(name:)] alias. With as many
+     * #[ToolBridge] as #[AsTool] they are paired by index; a single #[ToolBridge]
+     * applies to every tool of the class.
      *
      * @return list<ToolBridgeMetadata>
      */
@@ -78,7 +80,7 @@ final class ToolBridgeRegistry
 
         $toolAttributes = $reflection->getAttributes(AsTool::class);
         if ([] === $toolAttributes) {
-            throw new \LogicException(sprintf(
+            throw new \LogicException(\sprintf(
                 'Service "%s" is tagged tool_policy.bridge via #[ToolBridge] but is missing #[AsTool].',
                 $reflection->getName(),
             ));
@@ -87,7 +89,7 @@ final class ToolBridgeRegistry
         $bridgeCount = \count($bridgeAttributes);
         $toolCount = \count($toolAttributes);
         if (1 !== $bridgeCount && $bridgeCount !== $toolCount) {
-            throw new \LogicException(sprintf(
+            throw new \LogicException(\sprintf(
                 'Class "%s" declares %d #[AsTool] and %d #[ToolBridge]: use one #[ToolBridge] for all tools, '
                     . 'or exactly one per #[AsTool] (paired by declaration order).',
                 $reflection->getName(),
@@ -96,21 +98,37 @@ final class ToolBridgeRegistry
             ));
         }
 
+        if (1 === $bridgeCount && $toolCount > 1 && null !== $bridgeAttributes[0]->newInstance()->name) {
+            throw new \LogicException(\sprintf(
+                'Class "%s" declares %d #[AsTool] and a single #[ToolBridge] with a name: '
+                    . 'a shared #[ToolBridge] cannot set "name", declare one #[ToolBridge] per #[AsTool].',
+                $reflection->getName(),
+                $toolCount,
+            ));
+        }
+
         $entries = [];
         foreach ($toolAttributes as $index => $toolAttribute) {
             $bridge = $bridgeAttributes[1 === $bridgeCount ? 0 : $index]->newInstance();
             if (null !== $bridge->name && '' === trim($bridge->name)) {
-                throw new \LogicException(sprintf(
+                throw new \LogicException(\sprintf(
                     'Class "%s" declares #[ToolBridge] with an empty name: omit it to use the #[AsTool] name.',
                     $reflection->getName(),
                 ));
             }
-            $entries[] = new ToolBridgeMetadata(
-                name: $bridge->name ?? $toolAttribute->newInstance()->name,
-                enabled: $bridge->enabled,
-                tags: $bridge->tags,
-                requiresApproval: $bridge->requiresApproval,
-            );
+            $names = [$toolAttribute->newInstance()->name];
+            if (null !== $bridge->name && $bridge->name !== $names[0]) {
+                $names[] = $bridge->name;
+            }
+            foreach ($names as $name) {
+                $entries[] = new ToolBridgeMetadata(
+                    name: $name,
+                    enabled: $bridge->enabled,
+                    tags: $bridge->tags,
+                    requiresApproval: $bridge->requiresApproval,
+                    className: $reflection->getName(),
+                );
+            }
         }
 
         return $entries;

@@ -19,7 +19,7 @@ use ToolPolicy\Bundle\Registry\ToolBridgeRegistry;
  */
 final class FilteredToolbox implements ToolboxInterface
 {
-    /** @var Tool[]|null */
+    /** @var list<Tool>|null */
     private ?array $filteredTools = null;
 
     /**
@@ -34,48 +34,20 @@ final class FilteredToolbox implements ToolboxInterface
 
     public function getTools(): array
     {
-        if (null !== $this->filteredTools) {
-            return $this->filteredTools;
-        }
-
-        $tools = [];
-        foreach ($this->inner->getTools() as $tool) {
-            $name = $tool->getName();
-            $metadata = $this->registry->get($name);
-
-            // No bridge metadata: visible when no tag filter is configured, hidden as soon as
-            // allowed_tags is non-empty (a tool without #[ToolBridge] carries no tag to match).
-            if (null === $metadata) {
-                if ([] === $this->allowedTags) {
-                    $tools[] = $tool;
-                }
-                continue;
-            }
-
-            if (!$metadata->enabled) {
-                continue;
-            }
-
-            if ([] !== $this->allowedTags && !$this->matchesTags($metadata)) {
-                continue;
-            }
-
-            $tools[] = $tool;
-        }
-
-        return $this->filteredTools = $tools;
+        return $this->filteredTools ??= $this->filtrer(array_values($this->inner->getTools()));
     }
 
     public function execute(ToolCall $toolCall): ToolResult
     {
         // Hidden is not enough: a tool the model cannot see must not run either.
-        foreach ($this->getTools() as $tool) {
+        // Decided on the fresh inner list, not on the getTools() cache.
+        foreach ($this->filtrer(array_values($this->inner->getTools())) as $tool) {
             if ($tool->getName() === $toolCall->getName()) {
                 return $this->inner->execute($toolCall);
             }
         }
 
-        return new ToolResult($toolCall, sprintf('Tool "%s" is not available.', $toolCall->getName()));
+        return new ToolResult($toolCall, \sprintf('Tool "%s" is not available.', $toolCall->getName()));
     }
 
     /**
@@ -92,6 +64,46 @@ final class FilteredToolbox implements ToolboxInterface
     public function getAllowedTags(): array
     {
         return $this->allowedTags;
+    }
+
+    /**
+     * @param list<Tool> $tools
+     *
+     * @return list<Tool>
+     */
+    private function filtrer(array $tools): array
+    {
+        $filtered = [];
+        foreach ($tools as $tool) {
+            $metadata = $this->registry->get($tool->getName());
+
+            // A policy only applies to the class that declares it: an alias (#[ToolBridge(name:)])
+            // matching the name of a tool from another class does not transfer the policy.
+            if (null !== $metadata && $metadata->className !== $tool->getReference()->getClass()) {
+                $metadata = null;
+            }
+
+            // No bridge metadata: visible when no tag filter is configured, hidden as soon as
+            // allowed_tags is non-empty (a tool without #[ToolBridge] carries no tag to match).
+            if (null === $metadata) {
+                if ([] === $this->allowedTags) {
+                    $filtered[] = $tool;
+                }
+                continue;
+            }
+
+            if (!$metadata->enabled) {
+                continue;
+            }
+
+            if ([] !== $this->allowedTags && !$this->matchesTags($metadata)) {
+                continue;
+            }
+
+            $filtered[] = $tool;
+        }
+
+        return $filtered;
     }
 
     private function matchesTags(ToolBridgeMetadata $metadata): bool

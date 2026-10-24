@@ -32,6 +32,10 @@ There is no `ai.toolbox` service: that name is only a tag. A toolbox that is
 not listed in `toolboxes` is not filtered: its agent sees every tool, including
 the ones marked `enabled: false`.
 
+The filter decorates each toolbox with the default priority (0). A decorator of
+your own on the same toolbox with a negative priority wraps the filter: tools it
+adds are not filtered. Use a positive priority to stay under the filter.
+
 Example with two agents and a filter:
 
 ```yaml
@@ -56,10 +60,16 @@ tool_policy:
 ```
 
 The same policy (`allowed_tags`) applies to every listed toolbox. Listing the
-same toolbox twice, or configuring no toolbox at all, fails at boot.
+same toolbox twice, or configuring no toolbox at all, fails at container
+compilation.
+
+`allowed_tags` is not merged across configuration files: a later declaration
+(for example under `when@prod`) replaces the previous list instead of adding to
+it.
 
 `toolbox_inner: 'ai.toolbox.assistant'` (single toolbox) is still accepted for
-backward compatibility, and only used when `toolboxes` is empty.
+backward compatibility. Setting both `toolboxes` and `toolbox_inner` fails at
+container compilation: use `toolboxes`.
 
 ## `#[ToolBridge]` attribute
 
@@ -96,7 +106,9 @@ A hidden tool is not executable either: calling it by name returns
 
 `#[AsTool]` is repeatable. A single `#[ToolBridge]` applies to every `#[AsTool]`
 of the class; otherwise declare exactly one `#[ToolBridge]` per `#[AsTool]`,
-paired by declaration order. Any other combination fails at boot.
+paired by declaration order. Any other combination throws when the policy
+registry is first built (first use of an agent toolbox or of `debug:llm-tools`),
+not at container compilation: run `debug:llm-tools` in CI to catch it early.
 
 ### Renamed tools
 
@@ -126,8 +138,16 @@ final class ReadFileTool
 }
 ```
 
-The policy is then registered under `read_file_v2` only, not under `read_file`.
-An empty `name` fails at boot, and so does a name already used by another tool.
+The policy is then registered under both `read_file` and `read_file_v2`: the
+rename is per agent, so another agent may still expose the tool as `read_file`.
+A policy only applies to a tool of the class that declares it: a `name` equal to
+the name of a tool from another class does not hand the policy over to it (that
+tool is treated as having no `#[ToolBridge]`). `debug:llm-tools` fails on a
+`name` that matches no tool of its class.
+
+An empty `name` throws in the same way as above (first use, not compilation),
+and so does a name already used by another `#[ToolBridge]` tool. A single
+`#[ToolBridge]` shared by several `#[AsTool]` cannot set `name`.
 
 ## Approval
 
@@ -145,4 +165,9 @@ php bin/console debug:llm-tools --tag=filesystem
 
 Shows, for each filtered toolbox, enabled, tags, approval, and whether the tool
 is exposed to the model, then the `#[ToolBridge]` tools exposed by no toolbox.
-`--tag` and `--exposed` apply to every section.
+`--tag` and `--exposed` apply to every section. Exits with an error when a
+`#[ToolBridge(name:)]` alias matches no tool of its class in any toolbox.
+
+The decorators are registered as `tool_policy.filtered_toolbox`,
+`tool_policy.filtered_toolbox.1`, ... (one per entry of `toolboxes`, in order);
+`ToolPolicy\Bundle\Toolbox\FilteredToolbox` is an alias to the first one.
